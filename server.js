@@ -1,30 +1,24 @@
 const express = require('express');
 const axios   = require('axios');
-const session = require('express-session');
 const path    = require('path');
+const crypto  = require('crypto');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-
-// ── Trust Railway's proxy ─────────────────────────────────────────────────────
 app.set('trust proxy', 1);
 
-// ── Sesiones ──────────────────────────────────────────────────────────────────
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'evg-secret-change-this',
-  resave: true,
-  saveUninitialized: true,
-  cookie: {
-    secure: true,
-    sameSite: 'none',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  }
-}));
+// ── Almacén en memoria (funciona bien en Railway con 1 replica) ───────────────
+const store = new Map();
 
-// ── Servir el HTML como página principal ──────────────────────────────────────
+function newToken() { return crypto.randomBytes(32).toString('hex'); }
+
+// ── Servir HTML ───────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  DISCORD OAUTH
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/auth/discord', (req, res) => {
   const params = new URLSearchParams({
     client_id:     process.env.DISCORD_CLIENT_ID,
@@ -56,26 +50,32 @@ app.get('/auth/discord/callback', async (req, res) => {
       headers: { Authorization: `Bearer ${access_token}` }
     });
     const u = userRes.data;
-    req.session.discord = {
-      id:       u.id,
-      username: u.username,
-      avatar:   u.avatar
-        ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=128`
-        : `https://cdn.discordapp.com/embed/avatars/${parseInt(u.discriminator || 0) % 5}.png`
-    };
-    req.session.save((err) => {
-      if (err) console.error('Session save error:', err);
-      res.redirect(`${FRONTEND}?discord_ok=1`);
+    const token = newToken();
+    store.set(token, {
+      discord: {
+        id:       u.id,
+        username: u.username,
+        avatar:   u.avatar
+          ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=128`
+          : `https://cdn.discordapp.com/embed/avatars/${parseInt(u.discriminator || 0) % 5}.png`
+      },
+      roblox: null
     });
+    // Pasar token por URL al frontend
+    res.redirect(`${FRONTEND}?discord_ok=1&token=${token}`);
   } catch (err) {
-    console.error('Discord OAuth error:', err.response?.data || err.message);
+    console.error('Discord error:', err.response?.data || err.message);
     res.redirect(`${FRONTEND}?error=discord_failed`);
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  ROBLOX
+// ─────────────────────────────────────────────────────────────────────────────
 app.post('/auth/roblox', async (req, res) => {
-  if (!req.session.discord) return res.status(401).json({ error: 'No Discord session' });
-  const { username } = req.body;
+  const { username, token } = req.body;
+  const sess = store.get(token);
+  if (!sess || !sess.discord) return res.status(401).json({ error: 'Sin sesión de Discord' });
   if (!username) return res.status(400).json({ error: 'Username requerido' });
   try {
     const userRes = await axios.post(
@@ -97,26 +97,29 @@ app.post('/auth/roblox', async (req, res) => {
       );
       skins = invRes.data.data?.length || 0;
     } catch (_) {}
-    req.session.roblox = {
-      id: userId, username: robloxUser.name, avatar: avatarUrl,
-      skins, value: 0, coins: 0, trades: 0
-    };
-    req.session.save((err) => {
-      if (err) console.error('Session save error:', err);
-      res.json({ ok: true, roblox: req.session.roblox });
-    });
+    sess.roblox = { id: userId, username: robloxUser.name, avatar: avatarUrl, skins, value: 0, coins: 0, trades: 0 };
+    store.set(token, sess);
+    res.json({ ok: true, roblox: sess.roblox });
   } catch (err) {
     console.error('Roblox error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Error al conectar con Roblox' });
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  SESIÓN / LOGOUT
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/session', (req, res) => {
-  res.json({ discord: req.session.discord || null, roblox: req.session.roblox || null });
+  const token = req.query.token;
+  const sess  = store.get(token);
+  if (!sess) return res.json({ discord: null, roblox: null });
+  res.json({ discord: sess.discord, roblox: sess.roblox });
 });
 
 app.post('/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  const { token } = req.body;
+  store.delete(token);
+  res.json({ ok: true });
 });
 
 app.get('*', (req, res) => {
@@ -124,4 +127,4 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`EVG Backend corriendo en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`EVG Backend en puerto ${PORT}`));
