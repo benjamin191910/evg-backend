@@ -7,20 +7,23 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-// ── Servir el HTML como página principal ──────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
+// ── Trust Railway's proxy ─────────────────────────────────────────────────────
+app.set('trust proxy', 1);
 
 // ── Sesiones ──────────────────────────────────────────────────────────────────
 app.use(session({
   secret: process.env.SESSION_SECRET || 'evg-secret-change-this',
-  resave: false,
-  saveUninitialized: false,
+  resave: true,
+  saveUninitialized: true,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: true,
+    sameSite: 'none',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
+
+// ── Servir el HTML como página principal ──────────────────────────────────────
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/auth/discord', (req, res) => {
   const params = new URLSearchParams({
@@ -60,7 +63,10 @@ app.get('/auth/discord/callback', async (req, res) => {
         ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=128`
         : `https://cdn.discordapp.com/embed/avatars/${parseInt(u.discriminator || 0) % 5}.png`
     };
-    res.redirect(`${FRONTEND}?discord_ok=1`);
+    req.session.save((err) => {
+      if (err) console.error('Session save error:', err);
+      res.redirect(`${FRONTEND}?discord_ok=1`);
+    });
   } catch (err) {
     console.error('Discord OAuth error:', err.response?.data || err.message);
     res.redirect(`${FRONTEND}?error=discord_failed`);
@@ -95,7 +101,10 @@ app.post('/auth/roblox', async (req, res) => {
       id: userId, username: robloxUser.name, avatar: avatarUrl,
       skins, value: 0, coins: 0, trades: 0
     };
-    res.json({ ok: true, roblox: req.session.roblox });
+    req.session.save((err) => {
+      if (err) console.error('Session save error:', err);
+      res.json({ ok: true, roblox: req.session.roblox });
+    });
   } catch (err) {
     console.error('Roblox error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Error al conectar con Roblox' });
