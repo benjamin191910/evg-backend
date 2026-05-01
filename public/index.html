@@ -45,6 +45,19 @@
 
   /* ── RIGHT NAV BUTTONS ── */
   .nav-right{display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:4px}
+  .nav-profile-btn{display:flex;align-items:center;gap:8px;background:rgba(200,0,255,.12);border:1px solid rgba(200,0,255,.35);border-radius:8px;padding:5px 12px 5px 6px;cursor:pointer;transition:all .2s}
+  .nav-profile-btn:hover{background:rgba(200,0,255,.22);border-color:rgba(200,0,255,.6)}
+  .nav-profile-btn img{width:28px;height:28px;border-radius:50%;object-fit:cover}
+  .nav-profile-btn span{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#fff}
+  .nav-profile-guest{display:flex;align-items:center;gap:7px;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:5px 12px 5px 8px;cursor:pointer;transition:all .2s}
+  .nav-profile-guest:hover{border-color:rgba(200,0,255,.5);background:rgba(200,0,255,.08)}
+  .nav-profile-guest svg{opacity:.6}
+  .nav-profile-guest span{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.6)}
+  .nav-mini-menu{display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1a0a2e;border:1px solid rgba(200,0,255,.3);border-radius:8px;min-width:130px;z-index:100;overflow:hidden}
+  .nav-mini-menu.open{display:block}
+  .nav-mini-menu a{display:block;padding:10px 16px;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.8);text-decoration:none;transition:background .2s}
+  .nav-mini-menu a:hover{background:rgba(200,0,255,.15);color:#fff}
+  .nav-profile-wrap{position:relative}
   .nav-drop-btn{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);padding:6px 14px;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1px;cursor:pointer;transition:all .2s;text-transform:uppercase;display:flex;align-items:center;gap:6px;position:relative;white-space:nowrap}
   .nav-drop-btn:hover,.nav-drop-btn.open{border-color:#c800ff;color:#c800ff;box-shadow:0 0 10px rgba(200,0,255,0.3)}
   .nav-drop-btn svg{width:10px;height:10px;fill:currentColor;transition:transform .2s}
@@ -435,6 +448,23 @@
       </button>
     </div>
 
+    <!-- Navbar profile -->
+    <div class="nav-profile-wrap" id="navProfileWrap">
+      <!-- Guest state -->
+      <button class="nav-profile-guest" id="navGuest" onclick="document.getElementById('profileModal').classList.add('open')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <span>Profile</span>
+      </button>
+      <!-- Logged in state -->
+      <button class="nav-profile-btn" id="navLogged" style="display:none" onclick="toggleNavMenu()">
+        <img id="navAvatar" src="" alt="">
+        <span id="navUsername"></span>
+      </button>
+      <div class="nav-mini-menu" id="navMiniMenu">
+        <a href="#" onclick="document.getElementById('profileModal').classList.add('open');toggleNavMenu()">Profile</a>
+        <a href="#" onclick="toggleNavMenu()">My Trades</a>
+      </div>
+    </div>
     <button class="hamburger" onclick="toggleMenu()" id="hamburgerBtn">
       <span></span><span></span><span></span>
     </button>
@@ -712,10 +742,27 @@
     document.querySelectorAll('.nav-drop-btn.open').forEach(b => b.classList.remove('open'));
     if (!wasOpen) btn.classList.add('open');
   }
+  function toggleNavMenu() {
+    document.getElementById('navMiniMenu').classList.toggle('open');
+  }
+
+  function updateNavbar(discord, roblox) {
+    if (discord) {
+      document.getElementById('navGuest').style.display  = 'none';
+      document.getElementById('navLogged').style.display = 'flex';
+      document.getElementById('navAvatar').src           = roblox ? roblox.avatar : discord.avatar;
+      document.getElementById('navUsername').textContent = discord.username;
+    } else {
+      document.getElementById('navGuest').style.display  = 'flex';
+      document.getElementById('navLogged').style.display = 'none';
+    }
+  }
+
   document.addEventListener('click', e => {
     const menu=document.getElementById('contactMenu'), btn=document.getElementById('hamburgerBtn');
     if(!menu.contains(e.target)&&!btn.contains(e.target)) menu.classList.remove('open');
     if(!e.target.closest('.nav-drop-btn')) document.querySelectorAll('.nav-drop-btn.open').forEach(b=>b.classList.remove('open'));
+    if(!e.target.closest('.nav-profile-wrap')) document.getElementById('navMiniMenu').classList.remove('open');
   });
 
   // ── CONFIG ────────────────────────────────────────────────────────────────
@@ -772,6 +819,7 @@
     document.getElementById('pfUsername').textContent = roblox.username;
     document.getElementById('pfTag').innerHTML =
       `<svg width="14" height="14" viewBox="0 0 71 55" fill="#5865f2"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.6.9a40 40 0 0 0-1.8 3.6 54.2 54.2 0 0 0-16.2 0A39 39 0 0 0 25.8.9 58.4 58.4 0 0 0 11.3 5C1.6 19.5-1 33.6.3 47.5a58.9 58.9 0 0 0 18 9.1 43 43 0 0 0 3.7-6l-2.9-1.4.7-.5 3 1.5a39 39 0 0 0 14.4 0l3-1.5.7.5-3 1.4a42.8 42.8 0 0 0 3.7 6 58.7 58.7 0 0 0 18-9.1C62.5 31.4 59 17.4 60 4.9ZM23.6 39.2c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.5 3.2 6.4 7.2-2.8 7.2-6.4 7.2Zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.5 3.2 6.4 7.2-2.8 7.2-6.4 7.2Z"/></svg> ${discord.username}`;
+    updateNavbar(discord, roblox);
     document.getElementById('pfTrades').textContent = roblox.trades ?? '0';
     document.getElementById('pfSkins').textContent  = roblox.skins  ?? '0';
     document.getElementById('pfValue').textContent  = roblox.value  ?? '0';
@@ -823,6 +871,7 @@
     const token = getToken();
     await fetch(`${BACKEND}/logout`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token}) }).catch(()=>{});
     localStorage.removeItem('evg_token');
+    updateNavbar(null, null);
     document.getElementById('pfCard').classList.remove('visible');
     document.getElementById('pfStep2').style.display = 'none';
     document.getElementById('pfStep1').style.display = 'flex';
