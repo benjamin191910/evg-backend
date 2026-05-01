@@ -718,44 +718,43 @@
     if(!e.target.closest('.nav-drop-btn')) document.querySelectorAll('.nav-drop-btn.open').forEach(b=>b.classList.remove('open'));
   });
 
-  // ── CONFIG: cambia esto por la URL de tu backend en Railway ──────────────
-  const BACKEND = ''; // mismo dominio — Railway sirve todo junto
+  // ── CONFIG ────────────────────────────────────────────────────────────────
+  const BACKEND = '';
 
-  // ── Al cargar: revisar si venimos de callback de Discord ─────────────────
+  // ── Al cargar: revisar URL y localStorage ────────────────────────────────
   window.addEventListener('load', async () => {
     const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
 
-    if (params.get('discord_ok')) {
-      // Limpiar URL
+    if (params.get('discord_ok') && urlToken) {
+      localStorage.setItem('evg_token', urlToken);
       window.history.replaceState({}, '', window.location.pathname);
-      // Abrir modal y mostrar paso 2
       document.getElementById('profileModal').classList.add('open');
       await pfCheckSession();
       return;
     }
     if (params.get('error')) {
       window.history.replaceState({}, '', window.location.pathname);
-      document.getElementById('profileModal').classList.add('open');
-      return;
     }
-    // Revisar si ya hay sesión activa
-    await pfCheckSession();
+    // Revisar si ya hay sesión guardada
+    const savedToken = localStorage.getItem('evg_token');
+    if (savedToken) await pfCheckSession();
   });
 
-  async function pfCheckSession() {
-    try {
-      const res  = await fetch(`${BACKEND}/session`, { credentials: 'include' });
-      const data = await res.json();
+  function getToken() { return localStorage.getItem('evg_token') || ''; }
 
+  async function pfCheckSession() {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res  = await fetch(`${BACKEND}/session?token=${token}`);
+      const data = await res.json();
       if (data.discord && data.roblox) {
-        // Sesión completa: mostrar perfil
         pfShowCard(data.discord, data.roblox);
       } else if (data.discord) {
-        // Solo Discord: mostrar paso 2
         pfShowStep2(data.discord);
       }
-      // Si nada: mostrar paso 1 (estado default)
-    } catch(e) { /* sin sesión */ }
+    } catch(e) {}
   }
 
   function pfShowStep2(discord) {
@@ -769,20 +768,16 @@
     document.getElementById('pfStep1').style.display  = 'none';
     document.getElementById('pfStep2').style.display  = 'none';
     document.getElementById('pfCard').classList.add('visible');
-
-    // Usar avatar de Roblox, nombre de Roblox, tag de Discord
-    document.getElementById('pfAvatar').src          = roblox.avatar;
+    document.getElementById('pfAvatar').src           = roblox.avatar;
     document.getElementById('pfUsername').textContent = roblox.username;
     document.getElementById('pfTag').innerHTML =
       `<svg width="14" height="14" viewBox="0 0 71 55" fill="#5865f2"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.6.9a40 40 0 0 0-1.8 3.6 54.2 54.2 0 0 0-16.2 0A39 39 0 0 0 25.8.9 58.4 58.4 0 0 0 11.3 5C1.6 19.5-1 33.6.3 47.5a58.9 58.9 0 0 0 18 9.1 43 43 0 0 0 3.7-6l-2.9-1.4.7-.5 3 1.5a39 39 0 0 0 14.4 0l3-1.5.7.5-3 1.4a42.8 42.8 0 0 0 3.7 6 58.7 58.7 0 0 0 18-9.1C62.5 31.4 59 17.4 60 4.9ZM23.6 39.2c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.5 3.2 6.4 7.2-2.8 7.2-6.4 7.2Zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.5 3.2 6.4 7.2-2.8 7.2-6.4 7.2Z"/></svg> ${discord.username}`;
-
     document.getElementById('pfTrades').textContent = roblox.trades ?? '0';
     document.getElementById('pfSkins').textContent  = roblox.skins  ?? '0';
     document.getElementById('pfValue').textContent  = roblox.value  ?? '0';
     document.getElementById('pfCoins').textContent  = roblox.coins  ?? '0';
   }
 
-  // Paso 1: redirigir a Discord OAuth
   function pfLoginDiscord() {
     const btn = document.getElementById('btnDiscord');
     btn.disabled = true;
@@ -790,45 +785,32 @@
     window.location.href = `${BACKEND}/auth/discord`;
   }
 
-  // Paso 2: enviar username de Roblox al backend
   async function pfLoginRoblox() {
-    const input   = document.getElementById('robloxUsernameInput');
-    const errEl   = document.getElementById('robloxError');
-    const btn     = document.getElementById('btnRoblox');
+    const input    = document.getElementById('robloxUsernameInput');
+    const errEl    = document.getElementById('robloxError');
+    const btn      = document.getElementById('btnRoblox');
     const username = input.value.trim();
-
-    if (!username) {
-      errEl.textContent = 'Ingresa tu username de Roblox';
-      errEl.style.display = 'block';
-      return;
-    }
-
+    if (!username) { errEl.textContent='Ingresa tu username'; errEl.style.display='block'; return; }
     errEl.style.display = 'none';
     btn.disabled = true;
     btn.innerHTML = '⏳ Buscando...';
-
     try {
       const res  = await fetch(`${BACKEND}/auth/roblox`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ username, token: getToken() })
       });
       const data = await res.json();
-
       if (!res.ok) {
-        errEl.textContent = data.error || 'Error al conectar con Roblox';
+        errEl.textContent = data.error || 'Error';
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 512 512" fill="white"><path d="M116 0L0 396l280 116L396 116 116 0zm148 280l-80-33 33-80 80 33-33 80z"/></svg> Conectar';
         return;
       }
-
-      // Obtener sesión completa para mostrar datos de Discord también
-      const sesRes  = await fetch(`${BACKEND}/session`, { credentials: 'include' });
+      const sesRes  = await fetch(`${BACKEND}/session?token=${getToken()}`);
       const sesData = await sesRes.json();
       pfShowCard(sesData.discord, data.roblox);
-
     } catch(e) {
       errEl.textContent = 'No se pudo conectar al servidor';
       errEl.style.display = 'block';
@@ -837,9 +819,10 @@
     }
   }
 
-  // Logout
   async function pfLogout() {
-    await fetch(`${BACKEND}/logout`, { method: 'POST', credentials: 'include' }).catch(()=>{});
+    const token = getToken();
+    await fetch(`${BACKEND}/logout`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token}) }).catch(()=>{});
+    localStorage.removeItem('evg_token');
     document.getElementById('pfCard').classList.remove('visible');
     document.getElementById('pfStep2').style.display = 'none';
     document.getElementById('pfStep1').style.display = 'flex';
